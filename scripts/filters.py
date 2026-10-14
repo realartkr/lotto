@@ -2,6 +2,7 @@
 
 각 필터의 check는 (N, 6) 정수 배열(오름차순 번호)을 받아 통과 여부 (N,) bool 배열을 돌려주고,
 detail은 번호 6개 한 조합을 받아 결과 설명 문자열을 돌려준다.
+uses_prev가 있는 필터는 직전 회차 번호(prev)도 함께 받는다. 호출은 check()/detail()로 한다.
 """
 from collections import Counter
 from itertools import chain, combinations
@@ -68,12 +69,38 @@ def no_quad_run_detail(ns):
     return f"가장 긴 연속 {len(best)}개 ({'-'.join(map(str, best))})" if len(best) > 1 else "연속 없음"
 
 
+def carryover(c, prev):
+    """prev가 (6,)이면 모든 행에 같은 직전 회차, (N, 6)이면 행마다 다른 직전 회차"""
+    prev = np.asarray(prev)
+    if prev.ndim == 1:
+        mask = np.zeros(46, bool)
+        mask[prev] = True
+        hits = mask[c].sum(axis=1)
+    else:
+        hits = (c[:, :, None] == prev[:, None, :]).any(axis=2).sum(axis=1)
+    return hits <= 2
+
+
+def carryover_detail(ns, prev):
+    same = [x for x in ns if x in prev]
+    return f"직전 회차 번호 {len(same)}개" + (f" ({'·'.join(map(str, same))})" if same else "")
+
+
 FILTERS = [
     {"no": 1, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
     {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
     {"no": 3, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
     {"no": 4, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
+    {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_prev": True},
 ]
+
+
+def check(f, c, prev):
+    return f["check"](c, prev) if f.get("uses_prev") else f["check"](c)
+
+
+def detail(f, ns, prev):
+    return f["detail"](ns, prev) if f.get("uses_prev") else f["detail"](ns)
 
 
 # FILTERS.md 99번 보류 필터. 생성에는 쓰지 않고 통계만 참고로 낸다.
