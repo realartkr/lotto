@@ -54,10 +54,25 @@ def slip_detail(ns):
     return f"가로 최대 {r}개" + (f" ({rw})" if r > 1 else "") + f" · 세로 최대 {c}개" + (f" ({cw})" if c > 1 else "")
 
 
+def no_quad_run(c):
+    step = np.diff(c, axis=1) == 1
+    return ~(step[:, :-2] & step[:, 1:-1] & step[:, 2:]).any(axis=1)
+
+
+def no_quad_run_detail(ns):
+    best, run = [ns[0]], [ns[0]]
+    for x in ns[1:]:
+        run = run + [x] if x == run[-1] + 1 else [x]
+        if len(run) > len(best):
+            best = run
+    return f"가장 긴 연속 {len(best)}개 ({'-'.join(map(str, best))})" if len(best) > 1 else "연속 없음"
+
+
 FILTERS = [
     {"no": 1, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
     {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
     {"no": 3, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
+    {"no": 4, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
 ]
 
 
@@ -65,11 +80,6 @@ FILTERS = [
 def sum_range(c):
     s = c.sum(axis=1)
     return (s >= 100) & (s <= 175)
-
-
-def no_quad_run(c):
-    step = np.diff(c, axis=1) == 1
-    return ~(step[:, :-2] & step[:, 1:-1] & step[:, 2:]).any(axis=1)
 
 
 def zones(c):
@@ -82,9 +92,8 @@ def last_digit(c):
 
 RESERVE = [
     {"no": "99-1", "name": "합계 범위 (100 ~ 175)", "check": sum_range},
-    {"no": "99-2", "name": "연속번호 (4연속 금지)", "check": no_quad_run},
-    {"no": "99-3", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
-    {"no": "99-4", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
+    {"no": "99-2", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
+    {"no": "99-3", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
 ]
 
 
