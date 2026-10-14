@@ -67,9 +67,9 @@ def sum_range(c):
     return (s >= 100) & (s <= 175)
 
 
-def no_triple_run(c):
+def no_quad_run(c):
     step = np.diff(c, axis=1) == 1
-    return ~(step[:, :-1] & step[:, 1:]).any(axis=1)
+    return ~(step[:, :-2] & step[:, 1:-1] & step[:, 2:]).any(axis=1)
 
 
 def zones(c):
@@ -82,7 +82,7 @@ def last_digit(c):
 
 RESERVE = [
     {"no": "99-1", "name": "합계 범위 (100 ~ 175)", "check": sum_range},
-    {"no": "99-2", "name": "연속번호 (3연속 금지)", "check": no_triple_run},
+    {"no": "99-2", "name": "연속번호 (4연속 금지)", "check": no_quad_run},
     {"no": "99-3", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
     {"no": "99-4", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
 ]
