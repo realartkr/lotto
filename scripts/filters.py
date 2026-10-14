@@ -105,6 +105,20 @@ def long_absent_detail(ns, ctx):
     return f"{ABSENT}회 이상 쉰 번호 {len(cold)}개" + (f" ({'·'.join(map(str, cold))})" if cold else "")
 
 
+PRIMES = [x for x in range(2, 46) if all(x % k for k in range(2, int(x ** 0.5) + 1))]
+_PRIME = np.isin(np.arange(46), PRIMES)
+
+
+def primes(c):
+    n = _PRIME[c].sum(axis=1)
+    return (n >= 1) & (n <= 3)
+
+
+def primes_detail(ns):
+    ps = [x for x in ns if x in PRIMES]
+    return f"소수 {len(ps)}개" + (f" ({'·'.join(map(str, ps))})" if ps else "")
+
+
 FILTERS = [
     {"no": 1, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
     {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
@@ -112,6 +126,7 @@ FILTERS = [
     {"no": 4, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
     {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
     {"no": 6, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
+    {"no": 7, "name": "소수 개수", "check": primes, "detail": primes_detail},
 ]
 
 
