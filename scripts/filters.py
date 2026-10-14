@@ -79,7 +79,7 @@ FILTERS = [
 # FILTERS.md 99번 보류 필터. 생성에는 쓰지 않고 통계만 참고로 낸다.
 def sum_range(c):
     s = c.sum(axis=1)
-    return (s >= 100) & (s <= 175)
+    return (s >= 95) & (s <= 180)
 
 
 def zones(c):
@@ -91,7 +91,7 @@ def last_digit(c):
 
 
 RESERVE = [
-    {"no": "99-1", "name": "합계 범위 (100 ~ 175)", "check": sum_range},
+    {"no": "99-1", "name": "합계 범위 (95 ~ 180)", "check": sum_range},
     {"no": "99-2", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
     {"no": "99-3", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
 ]
