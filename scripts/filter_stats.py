@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-from filters import FILTERS, RESERVE, TOTAL, all_combinations, check, detail
+from filters import FILTERS, RESERVE, TOTAL, all_combinations, check, contexts, detail
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRAWS = os.path.join(ROOT, "data", "draws.json")
@@ -40,12 +40,11 @@ def mark(ok):
 def compute(draws):
     combos = all_combinations()
     hist = np.array([d["numbers"] for d in draws], dtype=np.int16)
-    # 직전 회차: 전체 조합은 다음 회차 기준(최신 회차), 역대는 각 회차의 바로 앞 회차 (1회는 없음 → 0)
-    prev_c = hist[-1]
-    prev_h = np.vstack([np.zeros((1, 6), np.int16), hist[:-1]])
+    # 지난 기록을 쓰는 필터: 전체 조합은 다음 회차 기준, 역대는 각 회차 직전 시점 기준
+    ctx_h, ctx_c = contexts(hist)
     rows, cum_c, cum_h = [], np.ones(len(combos), bool), np.ones(len(hist), bool)
     for f in FILTERS:
-        pc, ph = check(f, combos, prev_c), check(f, hist, prev_h)
+        pc, ph = check(f, combos, ctx_c), check(f, hist, ctx_h)
         cum_c &= pc
         cum_h &= ph
         rows.append({"filter": f, "combo_pass": int(pc.sum()), "hist_pass": int(ph.sum()),
@@ -69,8 +68,10 @@ def stat_row(r, nh):
 
 def render(draws, rows, reserve, log, today):
     last, nh = draws[-1], len(draws)
-    ns, prev = last["numbers"], draws[-2]["numbers"]
-    latest = [(f, bool(check(f, np.array([ns]), prev)[0])) for f in FILTERS]
+    ns = last["numbers"]
+    ctx_h, _ = contexts(np.array([d["numbers"] for d in draws]))
+    ctx = {k: v[-1] for k, v in ctx_h.items()}
+    latest = [(f, bool(check(f, np.array([ns]), ctx)[0])) for f in FILTERS]
     names = " · ".join(f"{f['no']} {f['name']}" for f in FILTERS)
     span = f"1 ~ {FILTERS[-1]['no']}"
     head = [h.format(total=TOTAL, nh=nh) for h in STAT_HEAD]
@@ -90,7 +91,7 @@ def render(draws, rows, reserve, log, today):
         "| # | 필터 | 결과 | 내용 |",
         "|:-:|------|:----:|------|",
     ]
-    out += [f"| {f['no']} | {f['name']} | {mark(ok)} | {detail(f, ns, prev)} |" for f, ok in latest]
+    out += [f"| {f['no']} | {f['name']} | {mark(ok)} | {detail(f, ns, ctx)} |" for f, ok in latest]
     out += [f"| | **{span} 모두** | **{mark(all(ok for _, ok in latest))}** | |", ""]
 
     out += [
@@ -118,9 +119,9 @@ def render(draws, rows, reserve, log, today):
     out += [
         "",
         "> 전체 조합 비율은 필터를 바꾸지 않는 한 매주 거의 같습니다. 역대 당첨번호 비율은 회차가 쌓이며 조금씩 바뀝니다.",
-        *([f"> 직전 회차 번호를 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_prev'))})는 "
-           f"다음 회차 기준(직전 = {last['round']}회 번호)으로 계산했고, 역대 당첨번호는 각 회차의 바로 앞 회차와 비교했습니다."]
-          if any(f.get("uses_prev") for f in FILTERS) else []),
+        *([f"> 지난 회차 기록을 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_ctx'))})의 "
+           f"전체 조합 수치는 다음 회차 기준({last['round']}회까지의 기록)이고, 역대 당첨번호는 각 회차 직전 시점의 기록과 비교했습니다."]
+          if any(f.get("uses_ctx") for f in FILTERS) else []),
         "",
         "### 🗂 99번 보류 필터 (참고 · 생성에는 미적용)",
         "",
@@ -149,10 +150,12 @@ if __name__ == "__main__":
     rows, reserve = compute(draws)
     today = datetime.datetime.now(KST).date().isoformat()
     last = draws[-1]
+    ctx_h, _ = contexts(np.array([d["numbers"] for d in draws]))
+    ctx_last = {k: v[-1] for k, v in ctx_h.items()}
     log = json.load(open(LOG)) if os.path.exists(LOG) else []
     log = [e for e in log if e["round"] != last["round"]]
     log.append({"updated": today, "round": last["round"], "numbers": last["numbers"],
-                "results": {f["name"]: bool(check(f, np.array([last["numbers"]]), draws[-2]["numbers"])[0]) for f in FILTERS},
+                "results": {f["name"]: bool(check(f, np.array([last["numbers"]]), ctx_last)[0]) for f in FILTERS},
                 "hist_pass": rows[-1]["hist_cum"], "hist_total": len(draws), "combo_pass": rows[-1]["combo_cum"]})
     with open(LOG, "w") as fp:
         fp.write("[\n" + ",\n".join(json.dumps(e, ensure_ascii=False) for e in log) + "\n]\n")

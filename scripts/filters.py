@@ -2,7 +2,8 @@
 
 각 필터의 check는 (N, 6) 정수 배열(오름차순 번호)을 받아 통과 여부 (N,) bool 배열을 돌려주고,
 detail은 번호 6개 한 조합을 받아 결과 설명 문자열을 돌려준다.
-uses_prev가 있는 필터는 직전 회차 번호(prev)도 함께 받는다. 호출은 check()/detail()로 한다.
+uses_ctx가 있는 필터는 지난 회차 기록(ctx: prev 직전 회차 번호, gaps 번호별 연속으로 안 나온 회차 수)도
+함께 받는다. ctx는 contexts()로 만들고, 호출은 check()/detail()로 한다.
 """
 from collections import Counter
 from itertools import chain, combinations
@@ -69,9 +70,9 @@ def no_quad_run_detail(ns):
     return f"가장 긴 연속 {len(best)}개 ({'-'.join(map(str, best))})" if len(best) > 1 else "연속 없음"
 
 
-def carryover(c, prev):
-    """prev가 (6,)이면 모든 행에 같은 직전 회차, (N, 6)이면 행마다 다른 직전 회차"""
-    prev = np.asarray(prev)
+def carryover(c, ctx):
+    """ctx["prev"]가 (6,)이면 모든 행에 같은 직전 회차, (N, 6)이면 행마다 다른 직전 회차"""
+    prev = np.asarray(ctx["prev"])
     if prev.ndim == 1:
         mask = np.zeros(46, bool)
         mask[prev] = True
@@ -81,9 +82,27 @@ def carryover(c, prev):
     return hits <= 2
 
 
-def carryover_detail(ns, prev):
-    same = [x for x in ns if x in prev]
+def carryover_detail(ns, ctx):
+    same = [x for x in ns if x in ctx["prev"]]
     return f"직전 회차 번호 {len(same)}개" + (f" ({'·'.join(map(str, same))})" if same else "")
+
+
+ABSENT = 15  # 이 회차 수 이상 연속으로 안 나온 번호를 "장기 미출현"으로 본다
+
+
+def long_absent(c, ctx):
+    """ctx["gaps"]가 (46,)이면 모든 행에 같은 기준, (N, 46)이면 행마다 다른 기준"""
+    cold = np.asarray(ctx["gaps"]) >= ABSENT
+    if cold.ndim == 1:
+        hits = cold[c].sum(axis=1)
+    else:
+        hits = np.take_along_axis(cold, c.astype(np.int64), axis=1).sum(axis=1)
+    return hits <= 2
+
+
+def long_absent_detail(ns, ctx):
+    cold = [x for x in ns if ctx["gaps"][x] >= ABSENT]
+    return f"{ABSENT}회 이상 쉰 번호 {len(cold)}개" + (f" ({'·'.join(map(str, cold))})" if cold else "")
 
 
 FILTERS = [
@@ -91,16 +110,31 @@ FILTERS = [
     {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
     {"no": 3, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
     {"no": 4, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
-    {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_prev": True},
+    {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
+    {"no": 6, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
 ]
 
 
-def check(f, c, prev):
-    return f["check"](c, prev) if f.get("uses_prev") else f["check"](c)
+def check(f, c, ctx):
+    return f["check"](c, ctx) if f.get("uses_ctx") else f["check"](c)
 
 
-def detail(f, ns, prev):
-    return f["detail"](ns, prev) if f.get("uses_prev") else f["detail"](ns)
+def detail(f, ns, ctx):
+    return f["detail"](ns, ctx) if f.get("uses_ctx") else f["detail"](ns)
+
+
+def contexts(hist):
+    """hist: (N, 6) 역대 당첨번호. 각 회차 직전 시점의 ctx (prev (N, 6), gaps (N, 46))와
+    다음 회차용 ctx (prev (6,), gaps (46,))를 돌려준다. 아직 한 번도 안 나온 번호는 1회부터 센다."""
+    n = len(hist)
+    last = np.full(46, -1)
+    prev = np.zeros((n, 6), np.int16)
+    gaps = np.zeros((n, 46), np.int32)
+    for t in range(n):
+        prev[t] = hist[t - 1] if t else 0
+        gaps[t] = t - last - 1
+        last[hist[t]] = t
+    return {"prev": prev, "gaps": gaps}, {"prev": hist[-1], "gaps": n - last - 1}
 
 
 # FILTERS.md 99번 보류 필터. 생성에는 쓰지 않고 통계만 참고로 낸다.
