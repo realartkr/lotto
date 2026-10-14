@@ -87,6 +87,35 @@ def carryover_detail(ns, ctx):
     return f"직전 회차 번호 {len(same)}개" + (f" ({'·'.join(map(str, same))})" if same else "")
 
 
+def _neighbor_mask(prev):
+    """prev (N, 6) → (N, 46) 이웃수 표시. prev가 0인 행(직전 회차 없음)은 이웃수 없음"""
+    n = len(prev)
+    m = np.zeros((n, 47), bool)
+    r, p = np.repeat(np.arange(n), 6), prev.ravel().astype(np.int64)
+    valid = p > 0
+    for s in (-1, 1):
+        q = p + s
+        ok = valid & (q >= 1) & (q <= 45)
+        m[r[ok], q[ok]] = True
+    m[r[valid], p[valid]] = False
+    return m[:, :46]
+
+
+def neighbors(c, ctx):
+    prev = np.asarray(ctx["prev"])
+    if prev.ndim == 1:
+        hits = _neighbor_mask(prev[None])[0][c].sum(axis=1)
+    else:
+        hits = np.take_along_axis(_neighbor_mask(prev), c.astype(np.int64), axis=1).sum(axis=1)
+    return hits <= 2
+
+
+def neighbors_detail(ns, ctx):
+    mask = _neighbor_mask(np.asarray(ctx["prev"])[None])[0]
+    nb = [x for x in ns if mask[x]]
+    return f"이웃수 {len(nb)}개" + (f" ({'·'.join(map(str, nb))})" if nb else "")
+
+
 ABSENT = 15  # 이 회차 수 이상 연속으로 안 나온 번호를 "장기 미출현"으로 본다
 
 
@@ -127,6 +156,7 @@ FILTERS = [
     {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
     {"no": 6, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
     {"no": 7, "name": "소수 개수", "check": primes, "detail": primes_detail},
+    {"no": 8, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
 ]
 
 
