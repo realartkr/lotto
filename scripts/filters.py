@@ -82,8 +82,8 @@ def sum_range(c):
     return (s >= 95) & (s <= 180)
 
 
-def zones(c):
-    return _max_per_group((c - 1) // 10, 5) <= 3
+def tens(c):
+    return _max_per_group(c // 10, 5) <= 3
 
 
 def last_digit(c):
@@ -92,7 +92,7 @@ def last_digit(c):
 
 RESERVE = [
     {"no": "99-1", "name": "합계 범위 (95 ~ 180)", "check": sum_range},
-    {"no": "99-2", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
+    {"no": "99-2", "name": "십의 자리 (같은 십의 자리 최대 3개)", "check": tens},
     {"no": "99-3", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
 ]
 
