@@ -61,6 +61,33 @@ FILTERS = [
 ]
 
 
+# FILTERS.md 99번 보류 필터. 생성에는 쓰지 않고 통계만 참고로 낸다.
+def sum_range(c):
+    s = c.sum(axis=1)
+    return (s >= 100) & (s <= 175)
+
+
+def no_triple_run(c):
+    step = np.diff(c, axis=1) == 1
+    return ~(step[:, :-1] & step[:, 1:]).any(axis=1)
+
+
+def zones(c):
+    return _max_per_group((c - 1) // 10, 5) <= 3
+
+
+def last_digit(c):
+    return _max_per_group(c % 10, 10) <= 2
+
+
+RESERVE = [
+    {"no": "99-1", "name": "합계 범위 (100 ~ 175)", "check": sum_range},
+    {"no": "99-2", "name": "연속번호 (3연속 금지)", "check": no_triple_run},
+    {"no": "99-3", "name": "구간 분포 (구간당 최대 3개)", "check": zones},
+    {"no": "99-4", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
+]
+
+
 def all_combinations():
     flat = chain.from_iterable(combinations(range(1, 46), 6))
     return np.fromiter(flat, dtype=np.int16, count=TOTAL * 6).reshape(TOTAL, 6)

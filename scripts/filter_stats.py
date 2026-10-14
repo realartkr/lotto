@@ -5,11 +5,12 @@ data/draws.json을 먼저 갱신(update_history.py)한 뒤 실행한다.
 """
 import datetime
 import json
+import math
 import os
 
 import numpy as np
 
-from filters import FILTERS, TOTAL, all_combinations
+from filters import FILTERS, RESERVE, TOTAL, all_combinations
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRAWS = os.path.join(ROOT, "data", "draws.json")
@@ -20,6 +21,16 @@ KST = datetime.timezone(datetime.timedelta(hours=9))
 
 def pct(n, total):
     return f"{n / total * 100:.2f}%"
+
+
+def gap(combo_rate, hist_rate):
+    """첫째 − 둘째 (%p). 걸러냄은 (조합, 당첨번호), 남음은 (당첨번호, 조합) 순으로 넘겨 +가 좋은 쪽이 되게 한다."""
+    return f"{(combo_rate - hist_rate) * 100:+.2f}%p"
+
+
+def noise(rate, n):
+    """무작위 추첨이어도 95% 확률로 생길 수 있는 차이"""
+    return f"±{1.96 * math.sqrt(rate * (1 - rate) / n) * 100:.2f}%p"
 
 
 def mark(ok):
@@ -36,15 +47,30 @@ def compute(draws):
         cum_h &= ph
         rows.append({"filter": f, "combo_pass": int(pc.sum()), "hist_pass": int(ph.sum()),
                      "combo_cum": int(cum_c.sum()), "hist_cum": int(cum_h.sum())})
-    return rows
+    reserve = [{"filter": f, "combo_pass": int(f["check"](combos).sum()), "hist_pass": int(f["check"](hist).sum())}
+               for f in RESERVE]
+    return rows, reserve
 
 
-def render(draws, rows, log, today):
+STAT_HEAD = [
+    "| # | 필터 | 전체 조합 ({total:,}개) | 역대 당첨번호 ({nh:,}회) | 차이 | 우연 범위 |",
+    "|:-:|------|------:|------:|------:|------:|",
+]
+
+
+def stat_row(r, nh):
+    f, dc, dh = r["filter"], TOTAL - r["combo_pass"], nh - r["hist_pass"]
+    return (f"| {f['no']} | {f['name']} | {pct(dc, TOTAL)} ({dc:,}개) | {pct(dh, nh)} ({dh:,}회) "
+            f"| {gap(dc / TOTAL, dh / nh)} | {noise(dc / TOTAL, nh)} |")
+
+
+def render(draws, rows, reserve, log, today):
     last, nh = draws[-1], len(draws)
     ns = last["numbers"]
     latest = [(f, bool(f["check"](np.array([ns]))[0])) for f in FILTERS]
     names = " · ".join(f"{f['no']} {f['name']}" for f in FILTERS)
     span = f"1 ~ {FILTERS[-1]['no']}"
+    head = [h.format(total=TOTAL, nh=nh) for h in STAT_HEAD]
     out = [
         "# 📊 필터 통계",
         "",
@@ -67,55 +93,63 @@ def render(draws, rows, log, today):
     out += [
         "## 🧮 필터별 걸러내는 비율",
         "",
+        "> **보는 법**",
+        "> - **차이** = 조합에서 걸러낸 비율 − 당첨번호에서 걸러낸 비율. **+로 클수록** 당첨번호는 덜 버리고 후보만 줄였다는 뜻입니다.",
+        "> - **우연 범위** = 무작위 추첨이어도 95% 확률로 생길 수 있는 차이. 차이가 이 범위를 넘을 때만 의미 있다고 볼 수 있습니다.",
+        "",
         "### 필터 하나만 적용했을 때 걸러내는 비율",
         "",
-        f"| # | 필터 | 전체 조합 ({TOTAL:,}개) | 역대 당첨번호 ({nh:,}회) |",
-        "|:-:|------|------:|------:|",
-    ]
-    for r in rows:
-        f, dc, dh = r["filter"], TOTAL - r["combo_pass"], nh - r["hist_pass"]
-        out.append(f"| {f['no']} | {f['name']} | {pct(dc, TOTAL)} ({dc:,}개) | {pct(dh, nh)} ({dh:,}회) |")
-    out += [
+        *head,
+        *(stat_row(r, nh) for r in rows),
         "",
         "### 1번부터 차례로 적용했을 때 남는 비율",
         "",
-        "| 적용 | 전체 조합 남음 | 역대 당첨번호 남음 |",
-        "|------|------:|------:|",
+        "| 적용 | 전체 조합 남음 | 역대 당첨번호 남음 | 차이 | 우연 범위 |",
+        "|------|------:|------:|------:|------:|",
     ]
     for i, r in enumerate(rows):
         label = " + ".join(str(x["filter"]["no"]) for x in rows[: i + 1])
+        rc, rh = r["combo_cum"] / TOTAL, r["hist_cum"] / nh
         out.append(f"| {label} | {r['combo_cum']:,}개 ({pct(r['combo_cum'], TOTAL)}) "
-                   f"| {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) |")
+                   f"| {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) | {gap(rh, rc)} | {noise(rc, nh)} |")
     out += [
         "",
         "> 전체 조합 비율은 필터를 바꾸지 않는 한 매주 같습니다. 역대 당첨번호 비율은 회차가 쌓이며 조금씩 바뀝니다.",
+        "",
+        "### 🗂 99번 보류 필터 (참고 · 생성에는 미적용)",
+        "",
+        *head,
+        *(stat_row(r, nh) for r in reserve),
         "",
         "---",
         "",
         "## 📝 주간 기록",
         "",
-        "| 갱신일 | 회차 | 당첨번호 | " + " | ".join(f"{f['no']} {f['name']}" for f in FILTERS) + f" | 역대 {span} 통과율 |",
-        "|:--:|:--:|------|" + ":--:|" * len(FILTERS) + "------:|",
+        "| 갱신일 | 회차 | 당첨번호 | " + " | ".join(f"{f['no']} {f['name']}" for f in FILTERS)
+        + f" | 역대 {span} 통과율 | 차이 |",
+        "|:--:|:--:|------|" + ":--:|" * len(FILTERS) + "------:|------:|",
     ]
     for e in reversed(log):
         marks = " | ".join({True: "⭕", False: "❌"}.get(e["results"].get(f["name"]), "-") for f in FILTERS)
+        rh = e["hist_pass"] / e["hist_total"]
+        diff = gap(rh, e["combo_pass"] / TOTAL) if "combo_pass" in e else "-"
         out.append(f"| {e['updated']} | {e['round']} | {', '.join(map(str, e['numbers']))} | {marks} "
-                   f"| {pct(e['hist_pass'], e['hist_total'])} ({e['hist_pass']:,}/{e['hist_total']:,}) |")
+                   f"| {pct(e['hist_pass'], e['hist_total'])} ({e['hist_pass']:,}/{e['hist_total']:,}) | {diff} |")
     return "\n".join(out) + "\n"
 
 
 if __name__ == "__main__":
     draws = json.load(open(DRAWS))
-    rows = compute(draws)
+    rows, reserve = compute(draws)
     today = datetime.datetime.now(KST).date().isoformat()
     last = draws[-1]
     log = json.load(open(LOG)) if os.path.exists(LOG) else []
     log = [e for e in log if e["round"] != last["round"]]
     log.append({"updated": today, "round": last["round"], "numbers": last["numbers"],
                 "results": {f["name"]: bool(f["check"](np.array([last["numbers"]]))[0]) for f in FILTERS},
-                "hist_pass": rows[-1]["hist_cum"], "hist_total": len(draws)})
+                "hist_pass": rows[-1]["hist_cum"], "hist_total": len(draws), "combo_pass": rows[-1]["combo_cum"]})
     with open(LOG, "w") as fp:
         fp.write("[\n" + ",\n".join(json.dumps(e, ensure_ascii=False) for e in log) + "\n]\n")
-    open(DOC, "w").write(render(draws, rows, log, today))
+    open(DOC, "w").write(render(draws, rows, reserve, log, today))
     print(f"{last['round']}회 기준 통계 갱신 · 1~{FILTERS[-1]['no']} 모두 통과: 조합 {pct(rows[-1]['combo_cum'], TOTAL)}, "
           f"역대 {pct(rows[-1]['hist_cum'], len(draws))}")
