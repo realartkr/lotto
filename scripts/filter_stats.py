@@ -110,15 +110,22 @@ def render(draws, rows, reserve, log, today):
         "",
         "| # | 필터 | 결과 | 내용 | 역대 통과 |",
         "|:-:|------|:----:|------|------:|",
+        "| | **1군 · 적용 필터** | | | |",
     ]
     hist_pass = {r["filter"]["name"]: r["hist_pass"] for r in rows}
     for f, ok in sorted(latest, key=lambda x: (-hist_pass[x[0]["name"]], x[0]["no"])):
         hp = hist_pass[f["name"]]
         out.append(f"| {f['no']} | {f['name']} | {mark(ok)} | {detail(f, ns, ctx)} | {hp:,}회 ({pct(hp, nh)}) |")
-    out += [f"| | **{span} 모두** | **{mark(all(ok for _, ok in latest))}** | "
+    out.append("| | **2군 · 99번 보류 필터 (생성 미적용)** | | | |")
+    for r in sorted(reserve, key=lambda r: -r["hist_pass"]):
+        f, hp = r["filter"], r["hist_pass"]
+        ok = bool(f["check"](np.array([ns]))[0])
+        out.append(f"| {f['no']} | {f['name']} | {mark(ok)} | {f['detail'](ns)} | {hp:,}회 ({pct(hp, nh)}) |")
+    out += [f"| | **1군 {span} 모두** | **{mark(all(ok for _, ok in latest))}** | "
             f"| **{rows[-1]['hist_cum']:,}회 ({pct(rows[-1]['hist_cum'], nh)})** |",
             "",
-            f"> 역대 통과 = 1 ~ {nh:,}회 당첨번호 중 그 필터를 통과한 횟수. 많이 통과한 필터부터 적었습니다.",
+            f"> 역대 통과 = 1 ~ {nh:,}회 당첨번호 중 그 필터를 통과한 횟수. 군마다 많이 통과한 필터부터 적었습니다.",
+            "> 2군 필터는 생성에 쓰지 않고 수치만 지켜봅니다. 1군으로 올리려면 FILTERS.md에서 번호를 붙여 위로 옮깁니다.",
             ""]
 
     out += [

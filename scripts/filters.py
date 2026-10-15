@@ -198,13 +198,22 @@ def sum_range(c):
     return (s >= 95) & (s <= 180)
 
 
+def sum_range_detail(ns):
+    return f"합계 {sum(ns)}"
+
+
 def tens(c):
     return _max_per_group(c // 10, 5) <= 3
 
 
+def tens_detail(ns):
+    n, where = _most({x: x // 10 for x in ns}, lambda k: f"{k}0번대" if k else "1~9")
+    return f"같은 십의 자리 최대 {n}개" + (f" ({where})" if n > 1 else "")
+
+
 RESERVE = [
-    {"no": "99-1", "name": "합계 범위 (95 ~ 180)", "check": sum_range},
-    {"no": "99-2", "name": "십의 자리 (같은 십의 자리 최대 3개)", "check": tens},
+    {"no": "99-1", "name": "합계 범위 (95 ~ 180)", "check": sum_range, "detail": sum_range_detail},
+    {"no": "99-2", "name": "십의 자리 (같은 십의 자리 최대 3개)", "check": tens, "detail": tens_detail},
 ]
 
 
