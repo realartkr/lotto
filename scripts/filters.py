@@ -2,8 +2,9 @@
 
 각 필터의 check는 (N, 6) 정수 배열(오름차순 번호)을 받아 통과 여부 (N,) bool 배열을 돌려주고,
 detail은 번호 6개 한 조합을 받아 결과 설명 문자열을 돌려준다.
-uses_ctx가 있는 필터는 지난 회차 기록(ctx: prev 직전 회차 번호, gaps 번호별 연속으로 안 나온 회차 수)도
-함께 받는다. ctx는 contexts()로 만들고, 호출은 check()/detail()로 한다.
+uses_ctx가 있는 필터는 지난 회차 기록(ctx: prev 직전 회차 번호, gaps 번호별 연속으로 안 나온 회차 수,
+t 회차 순번과 seen_keys/seen_first 역대 당첨 조합)도 함께 받는다. ctx는 contexts()로 만들고,
+한 회차분은 row_ctx()로 꺼내며, 호출은 check()/detail()로 한다.
 """
 from collections import Counter
 from itertools import chain, combinations
@@ -157,16 +158,37 @@ def last_digit_detail(ns):
     return f"같은 끝수 최대 {n}개" + (f" ({where})" if n > 1 else "")
 
 
+def combo_key(c):
+    """번호 6개 → 하나의 정수 (번호마다 비트 하나)"""
+    return (np.int64(1) << np.asarray(c, dtype=np.int64)).sum(axis=-1)
+
+
+def _drawn_before(c, ctx):
+    q = combo_key(c)
+    keys, first = ctx["seen_keys"], ctx["seen_first"]
+    i = np.clip(np.searchsorted(keys, q), 0, len(keys) - 1)
+    return (keys[i] == q) & (first[i] < ctx["t"])
+
+
+def new_combo(c, ctx):
+    return ~_drawn_before(c, ctx)
+
+
+def new_combo_detail(ns, ctx):
+    return "이전에 나온 적 없는 조합" if new_combo(np.array([ns]), ctx)[0] else "이전 당첨 조합과 같음"
+
+
 FILTERS = [
-    {"no": 1, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
-    {"no": 2, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
-    {"no": 3, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
-    {"no": 4, "name": "동일 끝수", "check": last_digit, "detail": last_digit_detail},
-    {"no": 5, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
-    {"no": 6, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
-    {"no": 7, "name": "소수 개수", "check": primes, "detail": primes_detail},
-    {"no": 8, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
-    {"no": 9, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
+    {"no": 1, "name": "역대 당첨 조합 제외", "check": new_combo, "detail": new_combo_detail, "uses_ctx": True},
+    {"no": 2, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
+    {"no": 3, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
+    {"no": 4, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
+    {"no": 5, "name": "동일 끝수", "check": last_digit, "detail": last_digit_detail},
+    {"no": 6, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
+    {"no": 7, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
+    {"no": 8, "name": "소수 개수", "check": primes, "detail": primes_detail},
+    {"no": 9, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
+    {"no": 10, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
 ]
 
 
@@ -189,7 +211,16 @@ def contexts(hist):
         prev[t] = hist[t - 1] if t else 0
         gaps[t] = t - last - 1
         last[hist[t]] = t
-    return {"prev": prev, "gaps": gaps}, {"prev": hist[-1], "gaps": n - last - 1}
+    keys = combo_key(hist)
+    seen_keys, first = np.unique(keys, return_index=True)
+    seen = {"seen_keys": seen_keys, "seen_first": first}
+    return ({"prev": prev, "gaps": gaps, "t": np.arange(n), **seen},
+            {"prev": hist[-1], "gaps": n - last - 1, "t": n, **seen})
+
+
+def row_ctx(ctx, i):
+    """contexts()의 회차별 ctx에서 i번째 회차 직전 시점만 꺼낸다"""
+    return {k: v if k.startswith("seen_") else v[i] for k, v in ctx.items()}
 
 
 # FILTERS.md 99번 보류 필터. 생성에는 쓰지 않고 통계만 참고로 낸다.

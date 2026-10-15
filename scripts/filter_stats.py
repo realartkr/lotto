@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-from filters import FILTERS, RESERVE, TOTAL, all_combinations, check, contexts, detail
+from filters import FILTERS, RESERVE, TOTAL, all_combinations, check, contexts, detail, row_ctx
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DRAWS = os.path.join(ROOT, "data", "draws.json")
@@ -72,7 +72,7 @@ def render(draws, rows, reserve, log, today):
     last, nh = draws[-1], len(draws)
     ns = last["numbers"]
     ctx_h, _ = contexts(np.array([d["numbers"] for d in draws]))
-    ctx = {k: v[-1] for k, v in ctx_h.items()}
+    ctx = row_ctx(ctx_h, -1)
     latest = [(f, bool(check(f, np.array([ns]), ctx)[0])) for f in FILTERS]
     names = " · ".join(f"{f['no']} {f['name']}" for f in FILTERS)
     span = f"1 ~ {FILTERS[-1]['no']}"
@@ -183,7 +183,7 @@ if __name__ == "__main__":
     today = datetime.datetime.now(KST).date().isoformat()
     last = draws[-1]
     ctx_h, _ = contexts(np.array([d["numbers"] for d in draws]))
-    ctx_last = {k: v[-1] for k, v in ctx_h.items()}
+    ctx_last = row_ctx(ctx_h, -1)
     log = json.load(open(LOG)) if os.path.exists(LOG) else []
     log = [e for e in log if e["round"] != last["round"]]
     log.append({"updated": today, "round": last["round"], "numbers": last["numbers"],
