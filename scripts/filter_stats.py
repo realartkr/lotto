@@ -108,11 +108,18 @@ def render(draws, rows, reserve, log, today):
         "",
         f"**{', '.join(map(str, ns))}** + 보너스 {last['bonus']}",
         "",
-        "| # | 필터 | 결과 | 내용 |",
-        "|:-:|------|:----:|------|",
+        "| # | 필터 | 결과 | 내용 | 역대 통과 |",
+        "|:-:|------|:----:|------|------:|",
     ]
-    out += [f"| {f['no']} | {f['name']} | {mark(ok)} | {detail(f, ns, ctx)} |" for f, ok in latest]
-    out += [f"| | **{span} 모두** | **{mark(all(ok for _, ok in latest))}** | |", ""]
+    hist_pass = {r["filter"]["name"]: r["hist_pass"] for r in rows}
+    for f, ok in sorted(latest, key=lambda x: (-hist_pass[x[0]["name"]], x[0]["no"])):
+        hp = hist_pass[f["name"]]
+        out.append(f"| {f['no']} | {f['name']} | {mark(ok)} | {detail(f, ns, ctx)} | {hp:,}회 ({pct(hp, nh)}) |")
+    out += [f"| | **{span} 모두** | **{mark(all(ok for _, ok in latest))}** | "
+            f"| **{rows[-1]['hist_cum']:,}회 ({pct(rows[-1]['hist_cum'], nh)})** |",
+            "",
+            f"> 역대 통과 = 1 ~ {nh:,}회 당첨번호 중 그 필터를 통과한 횟수. 많이 통과한 필터부터 적었습니다.",
+            ""]
 
     out += [
         "## 🧮 필터별 걸러내는 비율",

@@ -158,15 +158,15 @@ def last_digit_detail(ns):
 
 
 FILTERS = [
-    {"no": 1, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
-    {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
-    {"no": 3, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
-    {"no": 4, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
-    {"no": 5, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
-    {"no": 6, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
+    {"no": 1, "name": "연속번호", "check": no_quad_run, "detail": no_quad_run_detail},
+    {"no": 2, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
+    {"no": 3, "name": "직전 회차 번호", "check": carryover, "detail": carryover_detail, "uses_ctx": True},
+    {"no": 4, "name": "동일 끝수", "check": last_digit, "detail": last_digit_detail},
+    {"no": 5, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
+    {"no": 6, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
     {"no": 7, "name": "소수 개수", "check": primes, "detail": primes_detail},
-    {"no": 8, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
-    {"no": 9, "name": "동일 끝수", "check": last_digit, "detail": last_digit_detail},
+    {"no": 8, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
+    {"no": 9, "name": "용지 가로·세로", "check": slip, "detail": slip_detail},
 ]
 
 
