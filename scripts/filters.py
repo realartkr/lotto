@@ -148,6 +148,15 @@ def primes_detail(ns):
     return f"소수 {len(ps)}개" + (f" ({'·'.join(map(str, ps))})" if ps else "")
 
 
+def last_digit(c):
+    return _max_per_group(c % 10, 10) <= 2
+
+
+def last_digit_detail(ns):
+    n, where = _most({x: x % 10 for x in ns}, lambda k: f"끝수 {k}")
+    return f"같은 끝수 최대 {n}개" + (f" ({where})" if n > 1 else "")
+
+
 FILTERS = [
     {"no": 1, "name": "홀짝 비율", "check": odd_even, "detail": odd_even_detail},
     {"no": 2, "name": "9궁도", "check": nine_palace, "detail": nine_palace_detail},
@@ -157,6 +166,7 @@ FILTERS = [
     {"no": 6, "name": "장기 미출현 번호", "check": long_absent, "detail": long_absent_detail, "uses_ctx": True},
     {"no": 7, "name": "소수 개수", "check": primes, "detail": primes_detail},
     {"no": 8, "name": "이웃수", "check": neighbors, "detail": neighbors_detail, "uses_ctx": True},
+    {"no": 9, "name": "동일 끝수", "check": last_digit, "detail": last_digit_detail},
 ]
 
 
@@ -192,14 +202,9 @@ def tens(c):
     return _max_per_group(c // 10, 5) <= 3
 
 
-def last_digit(c):
-    return _max_per_group(c % 10, 10) <= 2
-
-
 RESERVE = [
     {"no": "99-1", "name": "합계 범위 (95 ~ 180)", "check": sum_range},
     {"no": "99-2", "name": "십의 자리 (같은 십의 자리 최대 3개)", "check": tens},
-    {"no": "99-3", "name": "끝자리 중복 (최대 2개)", "check": last_digit},
 ]
 
 
