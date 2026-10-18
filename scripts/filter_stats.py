@@ -39,33 +39,54 @@ def mark(ok):
     return "⭕ 통과" if ok else "❌ 탈락"
 
 
+SAMPLE_PER_DRAW = 1000  # 지난 기록을 쓰는 필터의 조합 비율을 회차마다 무작위 조합 이만큼으로 잰다
+
+
 def compute(draws):
+    """조합 비율은 당첨번호와 같은 기준(각 회차 직전 시점)으로 잰다.
+    지난 기록을 안 쓰는 필터는 전체 조합으로 정확히, 쓰는 필터는 회차마다 무작위 조합을 뽑아 평균을 낸다.
+    다음 회차 생성에 실제로 남는 조합 수(next_cum)는 따로 전체 조합으로 센다."""
     combos = all_combinations()
     hist = np.array([d["numbers"] for d in draws], dtype=np.int16)
-    # 지난 기록을 쓰는 필터: 전체 조합은 다음 회차 기준, 역대는 각 회차 직전 시점 기준
     ctx_h, ctx_c = contexts(hist)
-    rows, cum_c, cum_h = [], np.ones(len(combos), bool), np.ones(len(hist), bool)
+    n = len(hist)
+    week = np.repeat(np.arange(n), SAMPLE_PER_DRAW)
+    sample = combos[np.random.default_rng(0).integers(0, len(combos), len(week))]
+    ctx_s = {k: v if k.startswith("seen_") else v[week] for k, v in ctx_h.items()}
+    rows, cum_n, cum_s, cum_h = [], np.ones(len(combos), bool), np.ones(len(sample), bool), np.ones(n, bool)
+    exact = True  # 지금까지 적용한 필터가 모두 지난 기록을 안 쓰면 전체 조합으로 센 정확한 값을 쓴다
     for f in FILTERS:
-        pc, ph = check(f, combos, ctx_c), check(f, hist, ctx_h)
-        cum_c &= pc
+        pn, ph = check(f, combos, ctx_c), check(f, hist, ctx_h)
+        ps = check(f, sample, ctx_s)
+        exact &= not f.get("uses_ctx")
+        cum_n &= pn
+        cum_s &= ps
         cum_h &= ph
-        rows.append({"filter": f, "combo_pass": int(pc.sum()), "hist_pass": int(ph.sum()),
-                     "combo_cum": int(cum_c.sum()), "hist_cum": int(cum_h.sum())})
-    reserve = [{"filter": f, "combo_pass": int(f["check"](combos).sum()), "hist_pass": int(f["check"](hist).sum())}
-               for f in RESERVE]
+        rows.append({"filter": f, "hist_pass": int(ph.sum()), "hist_cum": int(cum_h.sum()),
+                     "combo_rate": float(ps.mean()) if f.get("uses_ctx") else float(pn.mean()),
+                     "combo_count": None if f.get("uses_ctx") else int(pn.sum()),
+                     "combo_cum_rate": float(cum_n.mean()) if exact else float(cum_s.mean()),
+                     "next_cum": int(cum_n.sum())})
+    reserve = []
+    for f in RESERVE:
+        pn = f["check"](combos)
+        reserve.append({"filter": f, "combo_rate": float(pn.mean()), "combo_count": int(pn.sum()),
+                        "hist_pass": int(f["check"](hist).sum())})
     return rows, reserve
 
 
 STAT_HEAD = [
-    "| # | 필터 | 전체 조합 ({total:,}개) | 역대 당첨번호 ({nh:,}회) | 차이 | 우연 범위 |",
+    "| # | 필터 | 전체 조합 | 역대 당첨번호 ({nh:,}회) | 차이 | 우연 범위 |",
     "|:-:|------|------:|------:|------:|------:|",
 ]
 
 
 def stat_row(r, nh):
-    f, dc, dh = r["filter"], TOTAL - r["combo_pass"], nh - r["hist_pass"]
-    return (f"| {f['no']} | {f['name']} | {pct(dc, TOTAL)} ({dc:,}개) | {pct(dh, nh)} ({dh:,}회) "
-            f"| {gap(dc / TOTAL, dh / nh)} | {noise(dc / TOTAL, nh)} |")
+    f, rc, dh = r["filter"], 1 - r["combo_rate"], nh - r["hist_pass"]
+    shown = (f"{rc * 100:.2f}% ({TOTAL - r['combo_count']:,}개)" if r["combo_count"] is not None
+             else f"{rc * 100:.2f}% (역대 평균)")
+    return (f"| {f['no']} | {f['name']} | {shown} | {pct(dh, nh)} ({dh:,}회) "
+            f"| {gap(rc, dh / nh)} | {noise(rc, nh)} |")
 
 
 def render(draws, rows, reserve, log, today):
@@ -145,14 +166,17 @@ def render(draws, rows, reserve, log, today):
     ]
     for i, r in enumerate(rows):
         label = " + ".join(str(x["filter"]["no"]) for x in rows[: i + 1])
-        rc, rh = r["combo_cum"] / TOTAL, r["hist_cum"] / nh
-        out.append(f"| {label} | {r['combo_cum']:,}개 ({pct(r['combo_cum'], TOTAL)}) "
-                   f"| {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) | {gap(rh, rc)} | {noise(rc, nh)} |")
+        rc, rh = r["combo_cum_rate"], r["hist_cum"] / nh
+        out.append(f"| {label} | {rc * 100:.2f}% | {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) "
+                   f"| {gap(rh, rc)} | {noise(rc, nh)} |")
     out += [
         "",
-        "> 전체 조합 비율은 필터를 바꾸지 않는 한 매주 거의 같습니다. 역대 당첨번호 비율은 회차가 쌓이며 조금씩 바뀝니다.",
-        *([f"> 지난 회차 기록을 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_ctx'))})의 "
-           f"전체 조합 수치는 다음 회차 기준({last['round']}회까지의 기록)이고, 역대 당첨번호는 각 회차 직전 시점의 기록과 비교했습니다."]
+        f"> **다음 회차({last['round'] + 1}회) 생성 기준** {span}번을 모두 통과하는 조합: "
+        f"**{rows[-1]['next_cum']:,}개 ({pct(rows[-1]['next_cum'], TOTAL)})**",
+        "> 역대 당첨번호 비율은 회차가 쌓이며 조금씩 바뀝니다.",
+        *([f"> 지난 회차 기록을 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_ctx'))})는 매주 기준이 바뀌어서, "
+           f"표의 전체 조합 비율은 역대 각 회차 직전 시점 기준으로 잰 평균입니다 (회차마다 무작위 조합 {SAMPLE_PER_DRAW:,}개). "
+           f"그래야 역대 당첨번호와 같은 기준으로 비교됩니다."]
           if any(f.get("uses_ctx") for f in FILTERS) else []),
         "",
         "### 🗂 99번 보류 필터 (참고 · 생성에는 미적용)",
@@ -171,7 +195,8 @@ def render(draws, rows, reserve, log, today):
     for e in reversed(log):
         marks = " | ".join({True: "⭕", False: "❌"}.get(e["results"].get(f["name"]), "-") for f in FILTERS)
         rh = e["hist_pass"] / e["hist_total"]
-        diff = gap(rh, e["combo_pass"] / TOTAL) if "combo_pass" in e else "-"
+        base = e.get("combo_rate", e["combo_pass"] / TOTAL if "combo_pass" in e else None)
+        diff = gap(rh, base) if base is not None else "-"
         out.append(f"| {e['updated']} | {e['round']} | {', '.join(map(str, e['numbers']))} | {marks} "
                    f"| {pct(e['hist_pass'], e['hist_total'])} ({e['hist_pass']:,}/{e['hist_total']:,}) | {diff} |")
     return "\n".join(out) + "\n"
@@ -188,9 +213,10 @@ if __name__ == "__main__":
     log = [e for e in log if e["round"] != last["round"]]
     log.append({"updated": today, "round": last["round"], "numbers": last["numbers"],
                 "results": {f["name"]: bool(check(f, np.array([last["numbers"]]), ctx_last)[0]) for f in FILTERS},
-                "hist_pass": rows[-1]["hist_cum"], "hist_total": len(draws), "combo_pass": rows[-1]["combo_cum"]})
+                "hist_pass": rows[-1]["hist_cum"], "hist_total": len(draws), "combo_rate": rows[-1]["combo_cum_rate"]})
     with open(LOG, "w") as fp:
         fp.write("[\n" + ",\n".join(json.dumps(e, ensure_ascii=False) for e in log) + "\n]\n")
     open(DOC, "w").write(render(draws, rows, reserve, log, today))
-    print(f"{last['round']}회 기준 통계 갱신 · 1~{FILTERS[-1]['no']} 모두 통과: 조합 {pct(rows[-1]['combo_cum'], TOTAL)}, "
+    print(f"{last['round']}회 기준 통계 갱신 · 1~{FILTERS[-1]['no']} 모두 통과: 조합 {rows[-1]['combo_cum_rate'] * 100:.2f}% "
+          f"(다음 회차 {pct(rows[-1]['next_cum'], TOTAL)}), "
           f"역대 {pct(rows[-1]['hist_cum'], len(draws))}")

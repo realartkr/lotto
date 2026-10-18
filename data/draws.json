@@ -1243,5 +1243,6 @@
 {"round": 1242, "date": "2026-09-19", "numbers": [2, 4, 10, 16, 31, 41], "bonus": 9, "first_winners": 9, "first_prize": 3281029250},
 {"round": 1243, "date": "2026-09-26", "numbers": [9, 18, 24, 38, 43, 44], "bonus": 35, "first_winners": 12, "first_prize": 2592525282},
 {"round": 1244, "date": "2026-10-03", "numbers": [1, 13, 18, 26, 34, 38], "bonus": 25, "first_winners": 18, "first_prize": 1604686625},
-{"round": 1245, "date": "2026-10-10", "numbers": [4, 5, 25, 28, 32, 42], "bonus": 12, "first_winners": 10, "first_prize": 3006515775}
+{"round": 1245, "date": "2026-10-10", "numbers": [4, 5, 25, 28, 32, 42], "bonus": 12, "first_winners": 10, "first_prize": 3006515775},
+{"round": 1246, "date": "2026-10-17", "numbers": [16, 22, 23, 24, 27, 28], "bonus": 6, "first_winners": 16, "first_prize": 1881025430}
 ]
