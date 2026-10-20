@@ -64,28 +64,27 @@ def compute(draws):
         cum_h &= ph
         rows.append({"filter": f, "hist_pass": int(ph.sum()), "hist_cum": int(cum_h.sum()),
                      "combo_rate": float(ps.mean()) if f.get("uses_ctx") else float(pn.mean()),
-                     "combo_count": None if f.get("uses_ctx") else int(pn.sum()),
+                     "combo_next": int(pn.sum()),
                      "combo_cum_rate": float(cum_n.mean()) if exact else float(cum_s.mean()),
                      "next_cum": int(cum_n.sum())})
     reserve = []
     for f in RESERVE:
         pn = f["check"](combos)
-        reserve.append({"filter": f, "combo_rate": float(pn.mean()), "combo_count": int(pn.sum()),
+        reserve.append({"filter": f, "combo_rate": float(pn.mean()), "combo_next": int(pn.sum()),
                         "hist_pass": int(f["check"](hist).sum())})
     return rows, reserve
 
 
 STAT_HEAD = [
-    "| # | 필터 | 전체 조합 | 역대 당첨번호 ({nh:,}회) | 차이 | 우연 범위 |",
-    "|:-:|------|------:|------:|------:|------:|",
+    "| # | 필터 | 전체 조합 걸러냄 (다음 회차) | 전체 조합 걸러냄 (역대 평균) | 역대 당첨번호 걸러냄 ({nh:,}회) | 차이 | 우연 범위 |",
+    "|:-:|------|------:|------:|------:|------:|------:|",
 ]
 
 
 def stat_row(r, nh):
-    f, rc, dh = r["filter"], 1 - r["combo_rate"], nh - r["hist_pass"]
-    shown = (f"{rc * 100:.2f}% ({TOTAL - r['combo_count']:,}개)" if r["combo_count"] is not None
-             else f"{rc * 100:.2f}% (역대 평균)")
-    return (f"| {f['no']} | {f['name']} | {shown} | {pct(dh, nh)} ({dh:,}회) "
+    f, rc, dh, dn = r["filter"], 1 - r["combo_rate"], nh - r["hist_pass"], TOTAL - r["combo_next"]
+    avg = f"{rc * 100:.2f}%" if f.get("uses_ctx") else "같음"
+    return (f"| {f['no']} | {f['name']} | {pct(dn, TOTAL)} ({dn:,}개) | {avg} | {pct(dh, nh)} ({dh:,}회) "
             f"| {gap(rc, dh / nh)} | {noise(rc, nh)} |")
 
 
@@ -107,7 +106,11 @@ def render(draws, rows, reserve, log, today):
         "",
         "## 📖 용어 정리",
         "",
-        "**차이** = 전체 조합에서 걸러낸 비율 − 역대 당첨번호에서 걸러낸 비율",
+        "**차이** = 전체 조합 걸러냄 (역대 평균) − 역대 당첨번호 걸러냄",
+        "",
+        "- **전체 조합 걸러냄 (다음 회차)**: 다음 회차 번호를 만들 때 8,145,060개 중 실제로 걸러지는 비율",
+        "- **전체 조합 걸러냄 (역대 평균)**: 역대 당첨번호와 같은 시점 기준으로 잰 값. 직전 회차·미출현 기록을 쓰는 필터는 "
+        "매주 걸러내는 양이 달라서, 당첨번호와 공정하게 비교하려면 이 값을 씁니다. 그 밖의 필터는 다음 회차 값과 같습니다.",
         "",
         "- 🟩 **+ 는 좋음**: 당첨번호는 덜 버리고 후보 조합만 더 줄였다는 뜻",
         "- 🟥 **− 는 나쁨**: 후보 조합보다 당첨번호를 더 많이 버렸다는 뜻",
@@ -161,22 +164,22 @@ def render(draws, rows, reserve, log, today):
         "",
         "### 1번부터 차례로 적용했을 때 남는 비율",
         "",
-        "| 적용 | 전체 조합 남음 (역대 평균) | 역대 당첨번호 남음 | 차이 | 우연 범위 |",
-        "|------|------:|------:|------:|------:|",
+        "| 적용 | 전체 조합 남음 (다음 회차) | 전체 조합 남음 (역대 평균) | 역대 당첨번호 남음 | 차이 | 우연 범위 |",
+        "|------|------:|------:|------:|------:|------:|",
     ]
     for i, r in enumerate(rows):
         label = " + ".join(str(x["filter"]["no"]) for x in rows[: i + 1])
         rc, rh = r["combo_cum_rate"], r["hist_cum"] / nh
-        out.append(f"| {label} | {rc * 100:.2f}% | {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) "
+        out.append(f"| {label} | {r['next_cum']:,}개 ({pct(r['next_cum'], TOTAL)}) | {rc * 100:.2f}% "
+                   f"| {r['hist_cum']:,}회 ({pct(r['hist_cum'], nh)}) "
                    f"| {gap(rh, rc)} | {noise(rc, nh)} |")
     out += [
         "",
         f"> **다음 회차({last['round'] + 1}회) 생성 기준** {span}번을 모두 통과하는 조합: "
         f"**{rows[-1]['next_cum']:,}개 ({pct(rows[-1]['next_cum'], TOTAL)})**",
         "> 역대 당첨번호 비율은 회차가 쌓이며 조금씩 바뀝니다.",
-        *([f"> 지난 회차 기록을 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_ctx'))})는 매주 기준이 바뀌어서, "
-           f"표의 전체 조합 비율은 역대 각 회차 직전 시점 기준으로 잰 평균입니다 (회차마다 무작위 조합 {SAMPLE_PER_DRAW:,}개). "
-           f"그래야 역대 당첨번호와 같은 기준으로 비교됩니다."]
+        *([f"> 지난 회차 기록을 쓰는 필터({', '.join(str(f['no']) + '번' for f in FILTERS if f.get('uses_ctx'))})의 역대 평균은 "
+           f"역대 각 회차 직전 시점 기준으로 회차마다 무작위 조합 {SAMPLE_PER_DRAW:,}개를 뽑아 잰 값입니다."]
           if any(f.get("uses_ctx") for f in FILTERS) else []),
         "",
         "### 🗂 99번 보류 필터 (참고 · 생성에는 미적용)",
